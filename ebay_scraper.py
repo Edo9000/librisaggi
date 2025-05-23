@@ -7,7 +7,7 @@ class EbayScraper:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
-        self.headers = {"User-Agent": "Mozilla/5.0"}
+        self.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
 
     def get_price(self, isbn):
         url = f"https://www.ebay.it/sch/i.html?_nkw={isbn}"
