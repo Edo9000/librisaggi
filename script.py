@@ -15,6 +15,13 @@ try:
 except ImportError:
     EbayScraper = None
 
+def load_failed_isbns(filename="isbn_failed.txt"):
+    try:
+        with open(filename, "r") as f:
+            return set(line.strip() for line in f if line.strip())
+    except FileNotFoundError:
+        return set()    
+
 parser = argparse.ArgumentParser(description="Scrape book prices from IBS and/or eBay.")
 parser.add_argument('--ibs', action='store_true', help='Scrape IBS')
 parser.add_argument('--ebay', action='store_true', help='Scrape eBay')
@@ -23,12 +30,12 @@ args = parser.parse_args()
 filename = "20250515165414_allsalable_0.csv"
 df = pd.read_csv(filename, sep='\t')
 df_filtrati = df[df['ISBN'].notnull()]
-df_scraping = df_filtrati.iloc[200:250].copy()
+df_scraping = df_filtrati.iloc[250:270].copy()
 
 print(f"Numero di ISBN da processare: {len(df_scraping)}")
 print(df_scraping['ISBN'].head())
 
-max_workers = 4
+max_workers = 8
 
 if args.ibs:
     ibs_scraper = IBSScraper(max_retries=2, retry_delay=1, timeout=10)
@@ -44,7 +51,7 @@ if args.ibs:
         ))
 
 if args.ebay and EbayScraper is not None:
-    ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=10)
+    ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=15)
     def ebay_worker(isbn):
         result = ebay_scraper.get_price(str(isbn))
         time.sleep(random.uniform(0.6, 1.1))

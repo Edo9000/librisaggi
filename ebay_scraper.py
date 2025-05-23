@@ -1,9 +1,24 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import random
 
+def get_random_proxy(self):
+        try:
+            with open("working_proxies.txt", "r") as f:
+                proxies = [line.strip() for line in f if line.strip()]
+            proxy = random.choice(proxies)
+            return {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+        except Exception as e:
+            print(f"⚠️ Errore caricamento proxy: {e}")
+            return None
+def cache_failed_isbn(self, isbn, filename="isbn_failed.txt"):
+        with open(filename, "a") as f:
+            f.write(str(isbn) + "\n")    
+        
+        
 class EbayScraper:
-    def __init__(self, max_retries=2, retry_delay=1, timeout=10):
+    def __init__(self, max_retries=2, retry_delay=1, timeout=15):
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
