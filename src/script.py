@@ -31,7 +31,7 @@ args = parser.parse_args()
 filename = "20250515165414_allsalable_0.csv"
 df = pd.read_csv(filename, sep='\t')
 df_filtrati = df[df['ISBN'].notnull()]
-df_scraping = df_filtrati.iloc[280:320].copy()
+df_scraping = df_filtrati.iloc[283:284].copy()
 
 print(f"Numero di ISBN da processare: {len(df_scraping)}")
 print(df_scraping['ISBN'].head())

@@ -1,6 +1,6 @@
-from ibs_scraper import IBSScraper
-from ebay_scraper import EbayScraper
-from failure_cache import FailureCache
+from src.ibs_scraper import IBSScraper
+from src.ebay_scraper import EbayScraper
+from src.failure_cache import FailureCache
 
 def retry_failed_isbns():
     print("🔁 Inizio riprova ISBN falliti...")
