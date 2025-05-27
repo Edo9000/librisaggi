@@ -9,8 +9,6 @@ class ScraperAPIClient:
         self.default_params = {
             "api_key": self.api_key,
             "country_code": country_code,
-            "render": str(render).lower(),
-            "premium": str(premium).lower()
         }
         if session_number is not None:
             self.default_params["session_number"] = str(session_number)

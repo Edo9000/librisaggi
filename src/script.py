@@ -8,7 +8,7 @@ import random
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from failure_cache import FailureCache
-
+from amazon_scraper import AmazonScraper
 from ibs_scraper import IBSScraper
 # Importa solo se serve davvero
 try:
@@ -23,9 +23,10 @@ def load_failed_isbns(filename="isbn_failed.txt"):
     except FileNotFoundError:
         return set()    
 
-parser = argparse.ArgumentParser(description="Scrape book prices from IBS and/or eBay.")
+parser = argparse.ArgumentParser(description="Scrape book prices from IBS and/or eBay and/or Amazon.")
 parser.add_argument('--ibs', action='store_true', help='Scrape IBS')
 parser.add_argument('--ebay', action='store_true', help='Scrape eBay')
+parser.add_argument('--amz', action='store_true', help='Scrape Amazon')
 args = parser.parse_args()
 
 filename = "20250515165414_allsalable_0.csv"
@@ -52,7 +53,7 @@ if args.ibs:
         ))
 
 if args.ebay and EbayScraper is not None:
-    ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=15)
+    ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=10)
     def ebay_worker(isbn):
         result = ebay_scraper.get_price(str(isbn))
         time.sleep(random.uniform(0.6, 1.1))
@@ -63,6 +64,19 @@ if args.ebay and EbayScraper is not None:
             total=len(df_scraping),
             desc="eBay scraping"
         ))
+
+if args.amz and AmazonScraper is not None:
+    amz_scraper = AmazonScraper(max_retries=2, retry_delay=1, timeout=10)
+    def amz_worker(isbn):
+        result = amz_scraper.get_price(str(isbn))
+        time.sleep(random.uniform(0.6, 1.1))
+        return result
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        df_scraping['Prezzo_Amazon'] = list(tqdm(
+            executor.map(amz_worker, df_scraping['ISBN']),
+            total=len(df_scraping),
+            desc="Amazon scraping"
+        ))        
 
 output_filename = "catalogo_con_prezzi.csv"
 df_scraping.to_csv(output_filename, index=False)

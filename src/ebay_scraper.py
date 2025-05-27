@@ -8,7 +8,7 @@ class EbayScraper:
         self.retry_delay = retry_delay
         self.timeout = timeout
         self.api_key = api_key or "172215073eaeac24a47020e044760bf5"
-        self.client = ScraperAPIClient(api_key=self.api_key, country_code="it", render=True, premium=True)
+        self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
 
     def get_price(self, isbn):
         url = f"https://www.ebay.it/sch/i.html?_nkw={isbn}"
