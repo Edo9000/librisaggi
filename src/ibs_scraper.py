@@ -21,8 +21,8 @@ class IBSScraper:
 
                 soup = BeautifulSoup(html, "html.parser")
                 price_tags = soup.select(".cc-price")
-                if len(price_tags) >= 1:
-                    selected = price_tags[-1]
+                if len(price_tags) >= 29:
+                    selected = price_tags[28]
                     text = selected.get_text().replace("€", "").replace(",", ".").strip()
                     print(f"✅ [IBS] Prezzo trovato per ISBN {isbn}: {text}")
                     return float(text)
