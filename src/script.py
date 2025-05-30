@@ -7,7 +7,6 @@ import time
 import random
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
-from failure_cache import FailureCache
 from amazon_scraper import AmazonScraper
 from ibs_scraper import IBSScraper
 # Importa solo se serve davvero
@@ -32,15 +31,19 @@ args = parser.parse_args()
 filename = "20250515165414_allsalable_0.csv"
 df = pd.read_csv(filename, sep='\t')
 df_filtrati = df[df['ISBN'].notnull()]
-df_scraping = df_filtrati.iloc[283:284].copy()
+df_scraping = df_filtrati.iloc[1:32].copy()
 
 print(f"Numero di ISBN da processare: {len(df_scraping)}")
 print(df_scraping['ISBN'].head())
 
-max_workers = 8
+# Lista di ISBN fittizi noti per non restituire risultati
+sentinel_isbns = ["1234567891011", "1234567881012", "1234667881012"]
+
+
+max_workers = 5
 
 if args.ibs:
-    ibs_scraper = IBSScraper(max_retries=2, retry_delay=1, timeout=10)
+    ibs_scraper = IBSScraper(sentinel_isbns=sentinel_isbns, max_retries=2, retry_delay=1, timeout=10)
     def ibs_worker(isbn):
         result = ibs_scraper.get_price(str(isbn))
         time.sleep(random.uniform(0.2, 0.6))

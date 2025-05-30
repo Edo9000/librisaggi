@@ -6,16 +6,17 @@ Solo IBS:
 python --ibs
 Solo eBay:
 python --ebay
-Entrambi:
-python --ibs --ebay
+Solo Amazon:
+python --amz
+tutto:
+python --ibs --ebay --amz
 
-struttura che dovrei avere
-librisaggi/
-├── proxies.txt
-├── failed_isbn.json
-├── retry_failed.py
-├── src/
-│   ├── ibs_scraper.py
-│   ├── ebay_scraper.py
-│   ├── failure_cache.py
-│   └── proxy_manager.py
+
+TODO:
+Selettore per gruppo
+
+prova sulla prima batch di 1000 libri con ebay e IBS
+
+Rivedere caching
+
+interfaccia
