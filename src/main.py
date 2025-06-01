@@ -55,9 +55,26 @@ def start_processing_csv(
         amz_scraper = AmazonScraper(max_retries=2, retry_delay=1, timeout=15)
         def amz_worker(isbn):
             result = amz_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.8, 1.1, 1.5))
+            time.sleep(random.uniform(0.8, 1.5))  
             return result
         df_scraping['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_scraping['ISBN'], "Amazon")
+
+    def get_min_price(row):
+        prezzi = []
+        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
+            try:
+                val = float(row[col])
+                if val > 0:
+                    prezzi.append(val)
+            except (ValueError, TypeError, KeyError):
+                continue
+        return min(prezzi) if prezzi else row.get("Prezzo", None)
+
+    df_scraping["Prezzo"] = df_scraping.apply(get_min_price, axis=1)
+
+    for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
+        if col in df_scraping.columns:
+            del df_scraping[col]
 
     df_scraping.to_csv(output_filename, index=False)
     print(f"✅ File salvato: {output_filename}")
