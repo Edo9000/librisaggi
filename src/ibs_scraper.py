@@ -3,13 +3,14 @@ from bs4 import BeautifulSoup
 from scraper_api_client import ScraperAPIClient
 
 class IBSScraper:
-    def __init__(self, max_retries=2, retry_delay=1, timeout=10, api_key=None, sentinel_isbns=None):
+    def __init__(self, max_retries=2, retry_delay=1, timeout=10, api_key=None, sentinel_isbns=None, price_cache=None):
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
         self.api_key = api_key or "172215073eaeac24a47020e044760bf5"
         self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
         self.sentinel_index = None
+        self.cache = price_cache
 
         if sentinel_isbns:
             self.sentinel_index = self.detect_sentinel_index(sentinel_isbns)
@@ -45,6 +46,12 @@ class IBSScraper:
         return sentinel_index
 
     def get_price(self, isbn):
+        if self.cache:
+            cached_price = self.cache.get(isbn, "IBS")
+            if cached_price is not None:
+                print(f"💾 Prezzo trovato nella cache per ISBN {isbn}: {cached_price} €")
+                return cached_price
+            
         url = f"https://www.ibs.it/search/?ts=as&query={isbn}"
         for attempt in range(1, self.max_retries + 1):
             try:
@@ -70,6 +77,10 @@ class IBSScraper:
                 text = price_tag.get_text().replace("€", "").replace(",", ".").strip()
                 price = float(text)
                 print(f"✅ [IBS] Prezzo selezionato per ISBN {isbn}: {price} €")
+                
+                if self.cache:
+                    self.cache.set(isbn, "IBS", price)
+                
                 return price
 
             except Exception as e:

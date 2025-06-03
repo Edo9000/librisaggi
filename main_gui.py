@@ -13,7 +13,7 @@ class LibrisaggiApp(ctk.CTk):
         super().__init__()
 
         self.title("Librisaggi - Aggiorna Prezzi Catalogo")
-        self.geometry("600x700")
+        self.geometry("600x800")
 
         self.label = ctk.CTkLabel(self, text="Seleziona un file CSV da aggiornare")
         self.label.pack(pady=10)
@@ -23,7 +23,7 @@ class LibrisaggiApp(ctk.CTk):
 
         self.file_label = ctk.CTkLabel(self, text="")
         self.file_label.pack()
-        
+
         self.row_label = ctk.CTkLabel(self, text="Numero di righe da processare:")
         self.row_label.pack(pady=5)
 
@@ -31,11 +31,14 @@ class LibrisaggiApp(ctk.CTk):
         self.row_entry.insert(0, "30")
         self.row_entry.pack(pady=5)
 
+        self.analyze_all_checkbox = ctk.CTkCheckBox(self, text="Analizza l'intero file", command=self.toggle_row_entry)
+        self.analyze_all_checkbox.pack(pady=5)
+
         self.worker_label = ctk.CTkLabel(self, text="Numero di worker (thread):")
         self.worker_label.pack(pady=5)
 
         self.worker_entry = ctk.CTkEntry(self)
-        self.worker_entry.insert(0, "5")  # valore di default
+        self.worker_entry.insert(0, "5")
         self.worker_entry.pack(pady=5)
 
         self.output_label = ctk.CTkLabel(self, text="File di output:")
@@ -48,6 +51,10 @@ class LibrisaggiApp(ctk.CTk):
         self.output_button = ctk.CTkButton(self, text="Scegli dove salvare", command=self.select_output_path)
         self.output_button.pack(pady=5)
 
+        self.cache_checkbox = ctk.CTkCheckBox(self, text="Usa cache locale (price_cache.json)")
+        self.cache_checkbox.select()
+        self.cache_checkbox.pack(pady=5)
+
         self.ibs_checkbox = ctk.CTkCheckBox(self, text="Scrape IBS", command=self.check_scraper)
         self.ibs_checkbox.select()
         self.ibs_checkbox.pack(pady=5)
@@ -56,12 +63,15 @@ class LibrisaggiApp(ctk.CTk):
         self.ebay_checkbox.select()
         self.ebay_checkbox.pack(pady=5)
 
-        self.amz_checkbox = ctk.CTkCheckBox(self, text="Scrape Amazon", command=self.check_scraper)
+        self.amz_checkbox = ctk.CTkCheckBox(self, text="Scrape Amazon (opzionale)", command=self.check_scraper)
         self.amz_checkbox.deselect()
         self.amz_checkbox.pack(pady=5)
 
         self.start_button = ctk.CTkButton(self, text="Avvia Aggiornamento", command=self.start_processing, state="disabled")
         self.start_button.pack(pady=20)
+
+        self.stop_button = ctk.CTkButton(self, text="🛑 Interrompi", command=self.request_stop, state="disabled")
+        self.stop_button.pack(pady=5)
 
         self.progress_label = ctk.CTkLabel(self, text="")
         self.progress_label.pack()
@@ -71,6 +81,13 @@ class LibrisaggiApp(ctk.CTk):
         self.progress_bar.pack(pady=10)
 
         self.filepath = None
+        self.stop_requested = False
+
+    def toggle_row_entry(self):
+        if self.analyze_all_checkbox.get():
+            self.row_entry.configure(state="disabled")
+        else:
+            self.row_entry.configure(state="normal")
 
     def select_file(self):
         filepath = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -79,11 +96,21 @@ class LibrisaggiApp(ctk.CTk):
             self.file_label.configure(text=f"CSV: {filepath}")
             self.check_scraper()
 
+    def select_output_path(self):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if path:
+            self.output_path.delete(0, ctk.END)
+            self.output_path.insert(0, path)
+
     def check_scraper(self):
         if self.filepath and (self.ibs_checkbox.get() or self.ebay_checkbox.get() or self.amz_checkbox.get()):
             self.start_button.configure(state="normal")
         else:
             self.start_button.configure(state="disabled")
+
+    def request_stop(self):
+        self.stop_requested = True
+        self.progress_label.configure(text="⛔ Interruzione richiesta...")
 
     def start_processing(self):
         if not self.filepath:
@@ -92,8 +119,10 @@ class LibrisaggiApp(ctk.CTk):
 
         self.progress_label.configure(text="🔄 Elaborazione in corso...")
         self.progress_bar.set(0)
-        self.progress_label.configure(text="🔄 Elaborazione in corso...")
+        self.stop_requested = False
         self.start_button.configure(state="disabled")
+        self.stop_button.configure(state="normal")
+
         thread = threading.Thread(target=self.run_processing)
         thread.start()
 
@@ -101,37 +130,40 @@ class LibrisaggiApp(ctk.CTk):
         try:
             from src.main import start_processing_csv
 
-            row_limit = int(self.row_entry.get()) if self.row_entry.get().isdigit() else 30
+            if self.analyze_all_checkbox.get():
+                row_limit = None
+            else:
+                row_limit = int(self.row_entry.get()) if self.row_entry.get().isdigit() else 30
+
             max_workers = int(self.worker_entry.get()) if self.worker_entry.get().isdigit() else 5
             output_file = self.output_path.get() or "catalogo_con_prezzi.csv"
+            use_cache = self.cache_checkbox.get()
 
-            def update_progress(percentage):
-                self.progress_bar.set(percentage)
+            def update_progress(p):
+                self.progress_bar.set(p)
+
+            def stop_check():
+                return self.stop_requested
 
             output = start_processing_csv(
-                self.filepath,
+                filename=self.filepath,
                 use_ibs=self.ibs_checkbox.get(),
                 use_ebay=self.ebay_checkbox.get(),
                 use_amz=self.amz_checkbox.get(),
                 row_limit=row_limit,
                 max_workers=max_workers,
                 output_filename=output_file,
-                progress_callback=update_progress
+                progress_callback=update_progress,
+                stop_requested_callback=stop_check,
+                use_cache=use_cache
             )
             self.progress_label.configure(text=f"✅ File salvato: {output}")
-            self.start_button.configure(state="normal")
         except Exception as e:
             self.progress_label.configure(text="❌ Errore durante l'elaborazione.")
             messagebox.showerror("Errore", str(e))
+        finally:
+            self.stop_button.configure(state="disabled")
             self.start_button.configure(state="normal")
-
-    def select_output_path(self):
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-        if path:
-            self.output_path.delete(0, ctk.END)
-            self.output_path.insert(0, path)
-
-
 
 if __name__ == "__main__":
     app = LibrisaggiApp()
