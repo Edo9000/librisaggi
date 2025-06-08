@@ -18,7 +18,8 @@ class PriceCache:
 
     def set(self, isbn, source, value):
         self.cache[f"{isbn}_{source}"] = value
-        self.save()
+        if self.auto_save:
+            self.save()
 
     def save(self):
         try:

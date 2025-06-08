@@ -52,39 +52,35 @@ class AmazonScraper:
                 else:
                     print(f"❌ [Amazon] Errore definitivo dopo {self.max_retries} tentativi.")
                     return None
-                
-    def get_price_by_query(self, query):
+
+    def get_top_prices_by_query(self, query, max_results=5):
         search_url = f"https://www.amazon.it/s?k={quote_plus(query)}"
-
         if self.cache:
-            cached_price = self.cache.get(query, "Amazon")
-            if cached_price is not None:
-                print(f"💾 Prezzo trovato nella cache per query '{query}': {cached_price} €")
-                return cached_price
+            cached_price = self.cache.get(query + "_list", "Amazon")
+            if cached_price:
+                return cached_price[:max_results]
 
+        prices = []
         for attempt in range(1, self.max_retries + 1):
             try:
-                print(f"🔎 [Amazon] Cerco prezzo per query: {query} (tentativo {attempt})")
                 html = self.client.get(search_url)
                 if html is None:
                     raise Exception("Risposta vuota da ScraperAPI")
 
                 soup = BeautifulSoup(html, "html.parser")
-                prices = soup.select(".a-price .a-offscreen")
-                for tag in prices:
+                for tag in soup.select(".a-price .a-offscreen"):
                     try:
                         price = float(tag.text.replace("€", "").replace(",", ".").strip())
-                        print(f"✅ [Amazon] Prezzo trovato per query '{query}': {price}")
-                        if self.cache:
-                            self.cache.set(query, "Amazon", price)
-                        return price
+                        prices.append(price)
+                        if len(prices) >= max_results:
+                            break
                     except:
                         continue
-                print(f"⚠️ [Amazon] Nessun prezzo valido trovato per query '{query}'")
-                return None
-
+                break
             except Exception as e:
-                print(f"❌ [Amazon] Errore richiesta per '{query}' (tentativo {attempt}): {e}")
+                print(f"❌ [Amazon] Errore per query '{query}': {e}")
                 time.sleep(self.retry_delay)
-        return None
 
+        if self.cache:
+            self.cache.set(query + "_list", "Amazon", prices)
+        return prices

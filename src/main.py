@@ -2,12 +2,13 @@ import pandas as pd
 import time
 import random
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from amazon_scraper import AmazonScraper
 from ibs_scraper import IBSScraper
 from ebay_scraper import EbayScraper
 from price_cache import PriceCache
 from scraper_api_client import build_query
+from price_logic import final_price_no_isbn_multiple
 from typing import Callable
 from concurrent.futures import as_completed
 
@@ -84,24 +85,19 @@ def start_processing_csv(
             return result
         df_has_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_has_isbn['ISBN'], "Amazon")
 
-    # Ricerca alternativa per libri senza ISBN
     if use_ebay:
         def ebay_query_worker(row):
             query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
-            result = ebay_scraper.get_price_by_query(query)
-            time.sleep(random.uniform(0.6, 1.1))
-            return result
-        df_no_isbn['Prezzo_eBay'] = wrap_with_progress(ebay_query_worker, df_no_isbn.to_dict('records'), "eBay (senza ISBN)")
+            return ebay_scraper.get_top_prices_by_query(query, max_results=5)
+        df_no_isbn['Prezzi_eBay'] = wrap_with_progress(ebay_query_worker, df_no_isbn.to_dict('records'), "eBay (senza ISBN)")
 
     if use_amz:
         def amz_query_worker(row):
             query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
-            result = amz_scraper.get_price_by_query(query)
-            time.sleep(random.uniform(0.8, 1.5))
-            return result
-        df_no_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_query_worker, df_no_isbn.to_dict('records'), "Amazon (senza ISBN)")
+            return amz_scraper.get_top_prices_by_query(query, max_results=5)
+        df_no_isbn['Prezzi_Amazon'] = wrap_with_progress(amz_query_worker, df_no_isbn.to_dict('records'), "Amazon (senza ISBN)")
 
-    def get_min_price(row):
+    def final_price_with_isbn(row):
         prezzi = []
         for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
             try:
@@ -110,17 +106,32 @@ def start_processing_csv(
                     prezzi.append(val)
             except (ValueError, TypeError, KeyError):
                 continue
-        return min(prezzi) if prezzi else row.get("Prezzo", None)
+        if not prezzi:
+            return row.get("Prezzo", None)
+        return round(sum(prezzi) / len(prezzi) * 0.95, 2)
+
+    df_has_isbn["Prezzo"] = df_has_isbn.apply(final_price_with_isbn, axis=1)
+
+    manual_check_rows = []
+    prezzi_finali = []
+
+    for _, row in df_no_isbn.iterrows():
+        prezzo, flag_manual = final_price_no_isbn_multiple(row)
+        prezzi_finali.append(prezzo)
+        if flag_manual:
+            row_dict = row.to_dict()
+            row_dict["NOTE"] = "Unica copia / necessario controllo manuale"
+            manual_check_rows.append(row_dict)
+
+    df_no_isbn["Prezzo"] = prezzi_finali
 
     df_all = pd.concat([df_has_isbn, df_no_isbn], ignore_index=True)
-    df_all["Prezzo"] = df_all.apply(get_min_price, axis=1)
-
-    for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
-        if col in df_all.columns:
-            del df_all[col]
-
     df_all.to_csv(output_filename, index=False)
     print(f"✅ File salvato: {output_filename}")
+
+    if manual_check_rows:
+        pd.DataFrame(manual_check_rows).to_csv("manual_check.csv", index=False)
+        print(f"📄 Salvati {len(manual_check_rows)} libri da controllare manualmente in manual_check.csv")
 
     if cache:
         cache.save()
