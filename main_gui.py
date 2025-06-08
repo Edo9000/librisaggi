@@ -63,7 +63,7 @@ class LibrisaggiApp(ctk.CTk):
         self.ebay_checkbox.select()
         self.ebay_checkbox.pack(pady=5)
 
-        self.amz_checkbox = ctk.CTkCheckBox(self, text="Scrape Amazon (opzionale)", command=self.check_scraper)
+        self.amz_checkbox = ctk.CTkCheckBox(self, text="Scrape Amazon", command=self.check_scraper)
         self.amz_checkbox.deselect()
         self.amz_checkbox.pack(pady=5)
 
@@ -163,7 +163,7 @@ class LibrisaggiApp(ctk.CTk):
             messagebox.showerror("Errore", str(e))
         finally:
             self.stop_button.configure(state="disabled")
-            self.start_button.configure(state="normal")
+        
 
 if __name__ == "__main__":
     app = LibrisaggiApp()

@@ -1,13 +1,14 @@
 import time
 from bs4 import BeautifulSoup
 from scraper_api_client import ScraperAPIClient
+from urllib.parse import quote_plus
 
 class EbayScraper:
     def __init__(self, max_retries=2, retry_delay=1, timeout=10, api_key=None, price_cache=None):
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
-        self.api_key = api_key or "172215073eaeac24a47020e044760bf5"
+        self.api_key = api_key or "9f932458c616addb9a081730ae29a9d6"
         self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
         self.cache = price_cache
 
@@ -54,3 +55,37 @@ class EbayScraper:
                 else:
                     print(f"❌ [eBay] Errore definitivo dopo {self.max_retries} tentativi per ISBN {isbn}")
                     return None
+                
+    def get_price_by_query(self, query):
+        search_url = f"https://www.ebay.it/sch/i.html?_nkw={quote_plus(query)}&LH_BIN=1"
+        
+        if self.cache:
+            cached_price = self.cache.get(query, "eBay")
+            if cached_price is not None:
+                print(f"💾 Prezzo trovato nella cache per query '{query}': {cached_price} €")
+                return cached_price
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                print(f"🔎 [eBay] Cerco prezzo per query: {query} (tentativo {attempt})")
+                html = self.client.get(search_url)
+                if html is None:
+                    raise Exception("Risposta vuota da ScraperAPI")
+
+                soup = BeautifulSoup(html, "html.parser")
+                prices = soup.select(".s-item__price")
+                for tag in prices:
+                    price_text = tag.get_text().replace("€", "").replace(",", ".").strip()
+                    try:
+                        price = float(price_text.split()[0])
+                        print(f"✅ [eBay] Prezzo trovato per query '{query}': {price}")
+                        if self.cache:
+                            self.cache.set(query, "eBay", price)
+                        return price
+                    except:
+                        continue
+                return None
+            except Exception as e:
+                print(f"❌ [eBay] Errore richiesta per '{query}' (tentativo {attempt}): {e}")
+                time.sleep(self.retry_delay)
+        return None

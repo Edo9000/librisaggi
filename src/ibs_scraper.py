@@ -7,7 +7,7 @@ class IBSScraper:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
-        self.api_key = api_key or "172215073eaeac24a47020e044760bf5"
+        self.api_key = api_key or "9f932458c616addb9a081730ae29a9d6"
         self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
         self.sentinel_index = None
         self.cache = price_cache

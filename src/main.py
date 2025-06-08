@@ -7,6 +7,7 @@ from amazon_scraper import AmazonScraper
 from ibs_scraper import IBSScraper
 from ebay_scraper import EbayScraper
 from price_cache import PriceCache
+from scraper_api_client import build_query
 from typing import Callable
 from concurrent.futures import as_completed
 
@@ -23,24 +24,26 @@ def start_processing_csv(
     use_cache: bool = False
 ) -> str:
     df = pd.read_csv(filename, sep='\t')
-    df_filtrati = df[df['ISBN'].notnull()]
-    if row_limit is None:
-        df_scraping = df_filtrati.copy()
-    else:
-        df_scraping = df_filtrati.iloc[1:1 + row_limit].copy()
+    df_has_isbn = df[df['ISBN'].notnull()]
+    df_no_isbn = df[df['ISBN'].isnull()]
 
-    print(f"🔢 ISBN da processare: {len(df_scraping)}")
+    if row_limit is not None:
+        df_has_isbn = df_has_isbn.iloc[1:1 + row_limit].copy()
+        df_no_isbn = df_no_isbn.iloc[1:1 + row_limit].copy()
+
+    print(f"🔢 Libri con ISBN da processare: {len(df_has_isbn)}")
+    print(f"🔍 Libri SENZA ISBN da processare: {len(df_no_isbn)}")
 
     sentinel_isbns = ["1234567891011", "1234567881012", "1234667881012"]
     cache = PriceCache() if use_cache else None
 
-    def wrap_with_progress(scraper_fn, isbn_list, label):
-        results = [None] * len(isbn_list)
-        total = len(isbn_list)
+    def wrap_with_progress(scraper_fn, item_list, label):
+        results = [None] * len(item_list)
+        total = len(item_list)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_index = {
-                executor.submit(scraper_fn, isbn): idx
-                for idx, isbn in enumerate(isbn_list)
+                executor.submit(scraper_fn, item): idx
+                for idx, item in enumerate(item_list)
             }
             for i, future in enumerate(tqdm(as_completed(future_to_index), total=total, desc=label)):
                 if stop_requested_callback():
@@ -63,23 +66,40 @@ def start_processing_csv(
             result = ibs_scraper.get_price(str(isbn))
             time.sleep(random.uniform(0.2, 0.6))
             return result
-        df_scraping['Prezzo_IBS'] = wrap_with_progress(ibs_worker, df_scraping['ISBN'], "IBS")
+        df_has_isbn['Prezzo_IBS'] = wrap_with_progress(ibs_worker, df_has_isbn['ISBN'], "IBS")
 
-    if use_ebay and EbayScraper is not None:
+    if use_ebay:
         ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=10, price_cache=cache)
         def ebay_worker(isbn):
             result = ebay_scraper.get_price(str(isbn))
             time.sleep(random.uniform(0.6, 1.1))
             return result
-        df_scraping['Prezzo_eBay'] = wrap_with_progress(ebay_worker, df_scraping['ISBN'], "eBay")
+        df_has_isbn['Prezzo_eBay'] = wrap_with_progress(ebay_worker, df_has_isbn['ISBN'], "eBay")
 
-    if use_amz and AmazonScraper is not None:
+    if use_amz:
         amz_scraper = AmazonScraper(max_retries=2, retry_delay=1, timeout=15, price_cache=cache)
         def amz_worker(isbn):
             result = amz_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.8, 1.5))  
+            time.sleep(random.uniform(0.8, 1.5))
             return result
-        df_scraping['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_scraping['ISBN'], "Amazon")
+        df_has_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_has_isbn['ISBN'], "Amazon")
+
+    # Ricerca alternativa per libri senza ISBN
+    if use_ebay:
+        def ebay_query_worker(row):
+            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
+            result = ebay_scraper.get_price_by_query(query)
+            time.sleep(random.uniform(0.6, 1.1))
+            return result
+        df_no_isbn['Prezzo_eBay'] = wrap_with_progress(ebay_query_worker, df_no_isbn.to_dict('records'), "eBay (senza ISBN)")
+
+    if use_amz:
+        def amz_query_worker(row):
+            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
+            result = amz_scraper.get_price_by_query(query)
+            time.sleep(random.uniform(0.8, 1.5))
+            return result
+        df_no_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_query_worker, df_no_isbn.to_dict('records'), "Amazon (senza ISBN)")
 
     def get_min_price(row):
         prezzi = []
@@ -92,13 +112,14 @@ def start_processing_csv(
                 continue
         return min(prezzi) if prezzi else row.get("Prezzo", None)
 
-    df_scraping["Prezzo"] = df_scraping.apply(get_min_price, axis=1)
+    df_all = pd.concat([df_has_isbn, df_no_isbn], ignore_index=True)
+    df_all["Prezzo"] = df_all.apply(get_min_price, axis=1)
 
     for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
-        if col in df_scraping.columns:
-            del df_scraping[col]
+        if col in df_all.columns:
+            del df_all[col]
 
-    df_scraping.to_csv(output_filename, index=False)
+    df_all.to_csv(output_filename, index=False)
     print(f"✅ File salvato: {output_filename}")
 
     if cache:

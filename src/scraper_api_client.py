@@ -26,3 +26,11 @@ class ScraperAPIClient:
         except requests.RequestException as e:
             logging.error(f"ScraperAPI request failed: {e}")
             return None
+        
+def build_query(titolo, editore=None, anno=None):
+    parts = [titolo.strip()]
+    if editore:
+        parts.append(editore.strip())
+    if anno:
+        parts.append(str(anno).strip())
+    return " ".join(parts)
