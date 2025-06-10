@@ -8,7 +8,7 @@ class AmazonScraper:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
-        self.api_key = api_key or "9f932458c616addb9a081730ae29a9d6"
+        self.api_key = api_key or "e4b967afdaf014ef917eaa9773019cbe"
         self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
         self.cache = price_cache
 
@@ -69,12 +69,15 @@ class AmazonScraper:
 
                 soup = BeautifulSoup(html, "html.parser")
                 for tag in soup.select(".a-price .a-offscreen"):
+                    price_text = tag.text
+                    if isinstance(price_text, str):
+                        price_text = price_text.replace("€", "").replace(",", ".").strip()
                     try:
-                        price = float(tag.text.replace("€", "").replace(",", ".").strip())
+                        price = float(price_text)
                         prices.append(price)
                         if len(prices) >= max_results:
                             break
-                    except:
+                    except (ValueError, TypeError):
                         continue
                 break
             except Exception as e:
