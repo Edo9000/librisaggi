@@ -22,7 +22,7 @@ def start_processing_csv(
     row_limit: int = 30,
     progress_callback=None,
     stop_requested_callback: Callable[[], bool] = lambda: False,
-    use_cache: bool = False
+    use_cache: bool = True
 ) -> str:
     df = pd.read_csv(filename, sep='\t')
     df_has_isbn = df[df['ISBN'].notnull()]
@@ -112,6 +112,10 @@ def start_processing_csv(
 
     df_has_isbn["Prezzo"] = df_has_isbn.apply(final_price_with_isbn, axis=1)
 
+    if cache:
+        print("💾 Cache salvata dopo blocco ISBN")
+        cache.save()
+
     manual_check_rows = []
     prezzi_finali = []
 
@@ -126,14 +130,25 @@ def start_processing_csv(
     df_no_isbn["Prezzo"] = prezzi_finali
 
     df_all = pd.concat([df_has_isbn, df_no_isbn], ignore_index=True)
-    df_all.to_csv(output_filename, index=False)
-    print(f"✅ File salvato: {output_filename}")
 
-    if manual_check_rows:
-        pd.DataFrame(manual_check_rows).to_csv("manual_check.csv", index=False)
-        print(f"📄 Salvati {len(manual_check_rows)} libri da controllare manualmente in manual_check.csv")
+    try:
+        if stop_requested_callback():
+            print("⛔ Interrotto prima del salvataggio. Scrivo file parziale.")
 
-    if cache:
-        cache.save()
+        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzi_eBay", "Prezzi_Amazon"]:
+            if col in df_all.columns:
+                del df_all[col]
+
+        df_all.to_csv(output_filename, index=False)
+        print(f"✅ File salvato: {output_filename}")
+
+        if manual_check_rows:
+            pd.DataFrame(manual_check_rows).to_csv("manual_check.csv", index=False)
+            print(f"📄 Salvati {len(manual_check_rows)} libri da controllare manualmente in manual_check.csv")
+
+    finally:
+        if cache:
+            cache.save()
+            print("💾 Cache salvata.")
 
     return output_filename

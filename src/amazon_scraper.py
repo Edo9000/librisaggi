@@ -63,27 +63,41 @@ class AmazonScraper:
         prices = []
         for attempt in range(1, self.max_retries + 1):
             try:
-                html = self.client.get(search_url)
+                print(f"🔎 [Amazon] Cerco prezzi per query: '{query}' (tentativo {attempt})")
+                html = self.client.get(search_url, timeout=self.timeout)
                 if html is None:
                     raise Exception("Risposta vuota da ScraperAPI")
 
                 soup = BeautifulSoup(html, "html.parser")
-                for tag in soup.select(".a-price .a-offscreen"):
-                    price_text = tag.text
-                    if isinstance(price_text, str):
-                        price_text = price_text.replace("€", "").replace(",", ".").strip()
+
+                # Stampa per debug
+                all_price_tags = soup.select(".a-price .a-offscreen")
+                print(f"🔍 Trovati {len(all_price_tags)} tag prezzo .a-offscreen per query '{query}'")
+
+                for tag in all_price_tags:
                     try:
+                        price_text = tag.get_text().replace("€", "").replace(",", ".").strip()
                         price = float(price_text)
                         prices.append(price)
                         if len(prices) >= max_results:
                             break
                     except (ValueError, TypeError):
                         continue
-                break
+
+                break  # esce dal retry loop se va a buon fine
+
             except Exception as e:
-                print(f"❌ [Amazon] Errore per query '{query}': {e}")
+                print(f"❌ [Amazon] Errore per query '{query}' (tentativo {attempt}): {type(e).__name__} - {e}")
                 time.sleep(self.retry_delay)
 
+        # 🔁 Filtro e salvataggio cache
+        filtered = [p for p in prices if p > 0]
+        if filtered:
+            print(f"✅ [Amazon] Prezzi validi per query '{query}': {filtered}")
+        else:
+            print(f"⚠️ [Amazon] Nessun prezzo valido per query '{query}'")
+
         if self.cache:
-            self.cache.set(query + "_list", "Amazon", prices)
-        return prices
+            self.cache.set(query + "_list", "Amazon", filtered)
+
+        return filtered

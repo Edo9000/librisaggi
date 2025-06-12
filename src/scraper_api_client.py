@@ -5,7 +5,7 @@ from typing import Optional
 class ScraperAPIClient:
     def __init__(self, api_key: str, country_code: str = "it", render: bool = False, premium: bool = False, session_number: Optional[int] = None):
         self.api_key = api_key
-        self.base_url = "http://api.scraperapi.com"
+        self.base_url = "https://api.scraperapi.com"
         self.default_params = {
             "api_key": self.api_key,
             "country_code": country_code,
