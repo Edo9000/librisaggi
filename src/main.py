@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from amazon_scraper import AmazonScraper
 from ibs_scraper import IBSScraper
 from ebay_scraper import EbayScraper
+from AbeBooksScraper import AbeBooksScraper
 from price_cache import PriceCache
 from scraper_api_client import build_query
 from price_logic import final_price_no_isbn_multiple
@@ -17,6 +18,7 @@ def start_processing_csv(
     use_ibs: bool = True,
     use_ebay: bool = True,
     use_amz: bool = False,
+    use_abebooks: bool = False,
     max_workers: int = 5,
     output_filename: str = "catalogo_con_prezzi.csv",
     row_limit: int = 30,
@@ -85,6 +87,17 @@ def start_processing_csv(
             return result
         df_has_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_has_isbn['ISBN'], "Amazon")
 
+    if use_abebooks:
+        abebooks_scraper = AbeBooksScraper(max_retries=2, retry_delay=1, timeout=15, price_cache=cache)
+        def abebooks_worker(isbn):
+            prices = abebooks_scraper.get_price(str(isbn))
+            time.sleep(random.uniform(0.7, 1.2))
+            if prices:
+                return round(sum(prices) / len(prices), 2)
+            return None
+        df_has_isbn['Prezzo_AbeBooks'] = wrap_with_progress(abebooks_worker, df_has_isbn['ISBN'], "AbeBooks (media 5)")
+
+
     if use_ebay:
         def ebay_query_worker(row):
             query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
@@ -97,9 +110,16 @@ def start_processing_csv(
             return amz_scraper.get_top_prices_by_query(query, max_results=5)
         df_no_isbn['Prezzi_Amazon'] = wrap_with_progress(amz_query_worker, df_no_isbn.to_dict('records'), "Amazon (senza ISBN)")
 
+    if use_abebooks:
+        def abebooks_query_worker(row):
+            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
+            return abebooks_scraper.get_top_prices_by_query(query, max_results=5)
+        df_no_isbn['Prezzi_AbeBooks'] = wrap_with_progress(abebooks_query_worker, df_no_isbn.to_dict('records'), "AbeBooks (senza ISBN)")
+
+
     def final_price_with_isbn(row):
         prezzi = []
-        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon"]:
+        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzo_AbeBooks"]:
             try:
                 val = float(row[col])
                 if val > 0:
@@ -135,7 +155,7 @@ def start_processing_csv(
         if stop_requested_callback():
             print("⛔ Interrotto prima del salvataggio. Scrivo file parziale.")
 
-        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzi_eBay", "Prezzi_Amazon"]:
+        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzo_Abebooks", "Prezzi_eBay", "Prezzi_Amazon", "Prezzi_AbeBooks"]:
             if col in df_all.columns:
                 del df_all[col]
 
