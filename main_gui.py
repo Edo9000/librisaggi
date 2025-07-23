@@ -67,6 +67,10 @@ class LibrisaggiApp(ctk.CTk):
         self.amz_checkbox.deselect()
         self.amz_checkbox.pack(pady=5)
 
+        self.abebooks_checkbox = ctk.CTkCheckBox(self, text="Scrape AbeBooks", command=self.check_scraper)
+        self.abebooks_checkbox.deselect()
+        self.abebooks_checkbox.pack(pady=5)
+
         self.start_button = ctk.CTkButton(self, text="Avvia Aggiornamento", command=self.start_processing, state="disabled")
         self.start_button.pack(pady=20)
 
@@ -103,7 +107,7 @@ class LibrisaggiApp(ctk.CTk):
             self.output_path.insert(0, path)
 
     def check_scraper(self):
-        if self.filepath and (self.ibs_checkbox.get() or self.ebay_checkbox.get() or self.amz_checkbox.get()):
+        if self.filepath and (self.ibs_checkbox.get() or self.ebay_checkbox.get() or self.amz_checkbox.get() or self.abebooks_checkbox.get()):
             self.start_button.configure(state="normal")
         else:
             self.start_button.configure(state="disabled")
@@ -150,6 +154,7 @@ class LibrisaggiApp(ctk.CTk):
                 use_ibs=self.ibs_checkbox.get(),
                 use_ebay=self.ebay_checkbox.get(),
                 use_amz=self.amz_checkbox.get(),
+                use_abebooks=self.abebooks_checkbox.get(),
                 row_limit=row_limit,
                 max_workers=max_workers,
                 output_filename=output_file,

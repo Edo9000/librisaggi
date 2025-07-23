@@ -3,10 +3,10 @@ import pandas as pd
 import os
 
 # === Config ===
-input_file = "C:/Users/edoar/Freelance/librisaggi/20250515165414_allsalable_0.csv"
+input_file = "C:/Users/edoar/Freelance/librisaggi/catalogo_con_prezzi.csv"
 cache_file_new = "C:/Users/edoar/Freelance/librisaggi/price_cache.json"
 cache_file_old = "C:/Users/edoar/Freelance/librisaggi/price_cache_copy.json"
-output_file = "C:/Users/edoar/Freelance/librisaggi/catalogo_finale_da_cache.csv"
+output_file = "C:/Users/edoar/Freelance/librisaggi/catalogo_finale_x3.csv"
 output_confronto = "C:/Users/edoar/Freelance/librisaggi/confronto_prezzi.csv"
 
 # === Carica CSV originale ===
@@ -90,6 +90,17 @@ def aggiorna_prezzo(row):
     if isbn and isbn.isdigit():
         prezzi_isbn_abe = cache_new.get(f"{isbn}_list_AbeBooks") or []
         prezzi_isbn_ebay = cache_old.get(f"{isbn}_list_eBay") or []
+
+        if len(prezzi_isbn_abe) == 1:
+            unico = prezzi_isbn_abe[0]
+            prezzo_finale = int(round(unico * 1.10))
+            row["Prezzo"] = prezzo_finale
+            row["FontePrezzo"] = "AbeBooks (1 solo prezzo ISBN)"
+            row["CondizioneUsata"] = condizione
+            row["MoltiplicatoreCondizione"] = ""
+            row["NoteModifica"] = "1 solo prezzo AbeBooks (ISBN), maggiorato del 10% — eBay ignorato"
+            return row
+
         tutti_prezzi_isbn = list(prezzi_isbn_abe) + list(prezzi_isbn_ebay)
 
         if len(tutti_prezzi_isbn) >= 3:
@@ -100,11 +111,22 @@ def aggiorna_prezzo(row):
             prezzi_pesati.extend(tutti_prezzi_isbn)
             fonti.append("ISBN")
 
+
     # === Se non hai nulla via ISBN, prova con chiave e logiche normali
     if not prezzi_pesati:
         # AbeBooks via chiave
         prezzi_abe = cache_new.get(f"{chiave}_list_AbeBooks")
         if isinstance(prezzi_abe, list) and prezzi_abe:
+            if len(prezzi_abe) == 1:
+                unico = prezzi_abe[0]
+                prezzo_finale = int(round(unico * 1.10))
+                row["Prezzo"] = prezzo_finale
+                row["FontePrezzo"] = "AbeBooks (1 solo prezzo chiave)"
+                row["CondizioneUsata"] = condizione
+                row["MoltiplicatoreCondizione"] = ""
+                row["NoteModifica"] = "1 solo prezzo AbeBooks (chiave), maggiorato del 10% — eBay ignorato"
+                return row
+
             prezzi_clean = sorted(prezzi_abe)
             if len(prezzi_clean) > 1:
                 prezzi_clean.pop(0)
@@ -174,13 +196,13 @@ def aggiorna_prezzo(row):
 # === Applica aggiornamento prezzi
 df = df.apply(aggiorna_prezzo, axis=1)
 
-# === Applica limite ±50%
+# === Applica limite ±20%
 def clamp_price(row):
     orig = row["Prezzo_Originale"]
     new = row["Prezzo"]
     if pd.notnull(orig) and pd.notnull(new):
-        minp = round(orig * 0.6, 2)
-        maxp = round(orig * 1.4, 2)
+        minp = round(orig * 0.8, 2)
+        maxp = round(orig * 1.2, 2)
         return max(min(new, maxp), minp)
     return new
 
