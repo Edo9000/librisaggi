@@ -1,30 +1,39 @@
 import pandas as pd
 import time
 import random
+import os
+from csv_da_cache import esegui_post_processing
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from amazon_scraper import AmazonScraper
-from ibs_scraper import IBSScraper
 from ebay_scraper import EbayScraper
 from AbeBooksScraper import AbeBooksScraper
 from price_cache import PriceCache
 from scraper_api_client import build_query
-from price_logic import final_price_no_isbn_multiple
 from typing import Callable
 from concurrent.futures import as_completed
 
+# Cartella base del progetto
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Cartella per file generati
+data_dir = os.path.join(base_dir, "output")
+os.makedirs(data_dir, exist_ok=True)  # Crea la cartella se non esiste
+
+# Percorsi dei file nella cartella output/
+cache_file = os.path.join(data_dir, "price_cache.json")
+output_file = os.path.join(data_dir, "catalogo_finale.csv")
+output_confronto = os.path.join(data_dir, "confronto_prezzi.csv")
+input_file = os.path.join(data_dir, "catalogo_con_prezzi.csv")
+
 def start_processing_csv(
     filename: str,
-    use_ibs: bool = True,
-    use_ebay: bool = True,
-    use_amz: bool = False,
-    use_abebooks: bool = False,
     max_workers: int = 5,
-    output_filename: str = "catalogo_con_prezzi.csv",
+    output_filename: str = "src/output/catalogo_con_prezzi.csv",
     row_limit: int = 30,
     progress_callback=None,
     stop_requested_callback: Callable[[], bool] = lambda: False,
-    use_cache: bool = True
+    use_cache: bool = True,
+    api_key=None
 ) -> str:
     df = pd.read_csv(filename, sep='\t')
     df_has_isbn = df[df['ISBN'].notnull()]
@@ -37,8 +46,7 @@ def start_processing_csv(
     print(f"🔢 Libri con ISBN da processare: {len(df_has_isbn)}")
     print(f"🔍 Libri SENZA ISBN da processare: {len(df_no_isbn)}")
 
-    sentinel_isbns = ["1234567891011", "1234567881012", "1234667881012"]
-    cache = PriceCache() if use_cache else None
+    cache = PriceCache(path=cache_file) if use_cache else None
 
     def wrap_with_progress(scraper_fn, item_list, label):
         results = [None] * len(item_list)
@@ -63,63 +71,45 @@ def start_processing_csv(
                     progress_callback((i + 1) / total)
         return results
 
-    if use_ibs:
-        ibs_scraper = IBSScraper(sentinel_isbns=sentinel_isbns, max_retries=2, retry_delay=1, timeout=10, price_cache=cache)
-        def ibs_worker(isbn):
-            result = ibs_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.2, 0.6))
-            return result
-        df_has_isbn['Prezzo_IBS'] = wrap_with_progress(ibs_worker, df_has_isbn['ISBN'], "IBS")
-
-    if use_ebay:
-        ebay_scraper = EbayScraper(max_retries=2, retry_delay=1, timeout=10, price_cache=cache)
-        def ebay_worker(isbn):
-            result = ebay_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.6, 1.1))
-            return result
-        df_has_isbn['Prezzo_eBay'] = wrap_with_progress(ebay_worker, df_has_isbn['ISBN'], "eBay")
-
-    if use_amz:
-        amz_scraper = AmazonScraper(max_retries=2, retry_delay=1, timeout=15, price_cache=cache)
-        def amz_worker(isbn):
-            result = amz_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.8, 1.5))
-            return result
-        df_has_isbn['Prezzo_Amazon'] = wrap_with_progress(amz_worker, df_has_isbn['ISBN'], "Amazon")
-
-    if use_abebooks:
-        abebooks_scraper = AbeBooksScraper(max_retries=2, retry_delay=1, timeout=15, price_cache=cache)
-        def abebooks_worker(isbn):
-            prices = abebooks_scraper.get_price(str(isbn))
-            time.sleep(random.uniform(0.7, 1.2))
-            if prices:
-                return round(sum(prices) / len(prices), 2)
+    ebay_scraper = EbayScraper(max_retries=2, retry_delay=2, timeout=30, price_cache=cache, api_key=api_key)
+    def ebay_worker(isbn):
+        if stop_requested_callback():
             return None
-        df_has_isbn['Prezzo_AbeBooks'] = wrap_with_progress(abebooks_worker, df_has_isbn['ISBN'], "AbeBooks (media 5)")
+        result = ebay_scraper.get_price(str(isbn))
+        time.sleep(random.uniform(0.6, 1.1))
+        return result
+    df_has_isbn['Prezzo_eBay'] = wrap_with_progress(ebay_worker, df_has_isbn['ISBN'], "eBay")
+
+    abebooks_scraper = AbeBooksScraper(max_retries=2, retry_delay=2, timeout=30, price_cache=cache, api_key=api_key)
+    def abebooks_worker(isbn):
+        if stop_requested_callback():
+            return None
+        prices = abebooks_scraper.get_price(str(isbn))
+        time.sleep(random.uniform(0.7, 1.2))
+        if prices:
+            return round(sum(prices) / len(prices), 2)
+        return None
+    df_has_isbn['Prezzo_AbeBooks'] = wrap_with_progress(abebooks_worker, df_has_isbn['ISBN'], "AbeBooks (media 5)")
 
 
-    if use_ebay:
-        def ebay_query_worker(row):
-            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
-            return ebay_scraper.get_top_prices_by_query(query, max_results=5)
-        df_no_isbn['Prezzi_eBay'] = wrap_with_progress(ebay_query_worker, df_no_isbn.to_dict('records'), "eBay (senza ISBN)")
+    def ebay_query_worker(row):
+        if stop_requested_callback():
+            return None
+        query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
+        return ebay_scraper.get_top_prices_by_query(query, max_results=5)
+    df_no_isbn['Prezzi_eBay'] = wrap_with_progress(ebay_query_worker, df_no_isbn.to_dict('records'), "eBay (senza ISBN)")
 
-    if use_amz:
-        def amz_query_worker(row):
-            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
-            return amz_scraper.get_top_prices_by_query(query, max_results=5)
-        df_no_isbn['Prezzi_Amazon'] = wrap_with_progress(amz_query_worker, df_no_isbn.to_dict('records'), "Amazon (senza ISBN)")
-
-    if use_abebooks:
-        def abebooks_query_worker(row):
-            query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
-            return abebooks_scraper.get_top_prices_by_query(query, max_results=5)
-        df_no_isbn['Prezzi_AbeBooks'] = wrap_with_progress(abebooks_query_worker, df_no_isbn.to_dict('records'), "AbeBooks (senza ISBN)")
+    def abebooks_query_worker(row):
+        if stop_requested_callback():
+            return None
+        query = build_query(row['Titolo'], row['Editore'], row['Anno di stampa'])
+        return abebooks_scraper.get_top_prices_by_query(query, max_results=5)
+    df_no_isbn['Prezzi_AbeBooks'] = wrap_with_progress(abebooks_query_worker, df_no_isbn.to_dict('records'), "AbeBooks (senza ISBN)")
 
 
     def final_price_with_isbn(row):
         prezzi = []
-        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzo_AbeBooks"]:
+        for col in ["Prezzo_eBay", "Prezzo_AbeBooks"]:
             try:
                 val = float(row[col])
                 if val > 0:
@@ -136,18 +126,20 @@ def start_processing_csv(
         print("💾 Cache salvata dopo blocco ISBN")
         cache.save()
 
-    manual_check_rows = []
-    prezzi_finali = []
+    def final_price(row):
+        prezzi = []
+        for col in ["Prezzi_eBay", "Prezzi_AbeBooks"]:
+            values = row.get(col, [])
+            if isinstance(values, str):
+                try:
+                    values = eval(values)
+                except:
+                    values = []
+            if isinstance(values, list):
+                prezzi.extend([float(v) for v in values if v > 0])
+        return round(sum(prezzi) / len(prezzi), 2) if prezzi else None
 
-    for _, row in df_no_isbn.iterrows():
-        prezzo, flag_manual = final_price_no_isbn_multiple(row)
-        prezzi_finali.append(prezzo)
-        if flag_manual:
-            row_dict = row.to_dict()
-            row_dict["NOTE"] = "Unica copia / necessario controllo manuale"
-            manual_check_rows.append(row_dict)
-
-    df_no_isbn["Prezzo"] = prezzi_finali
+    df_no_isbn["Prezzo"] = df_no_isbn.apply(final_price, axis=1)
 
     df_all = pd.concat([df_has_isbn, df_no_isbn], ignore_index=True)
 
@@ -155,20 +147,27 @@ def start_processing_csv(
         if stop_requested_callback():
             print("⛔ Interrotto prima del salvataggio. Scrivo file parziale.")
 
-        for col in ["Prezzo_IBS", "Prezzo_eBay", "Prezzo_Amazon", "Prezzo_Abebooks", "Prezzi_eBay", "Prezzi_Amazon", "Prezzi_AbeBooks"]:
+        for col in ["Prezzo_eBay", "Prezzo_AbeBooks", "Prezzi_eBay", "Prezzi_AbeBooks"]:
             if col in df_all.columns:
                 del df_all[col]
 
-        df_all.to_csv(output_filename, index=False)
+        df_all.to_csv(output_filename, index=False, sep="\t")
         print(f"✅ File salvato: {output_filename}")
-
-        if manual_check_rows:
-            pd.DataFrame(manual_check_rows).to_csv("manual_check.csv", index=False)
-            print(f"📄 Salvati {len(manual_check_rows)} libri da controllare manualmente in manual_check.csv")
 
     finally:
         if cache:
             cache.save()
             print("💾 Cache salvata.")
+
+    if stop_requested_callback():
+        print("⛔ Interrotto prima della post-elaborazione.")
+        return output_filename
+
+    esegui_post_processing(
+        input_file=input_file,
+        cache_file=cache_file,
+        output_file=output_file,
+        output_confronto=output_confronto
+    )
 
     return output_filename

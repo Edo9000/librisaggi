@@ -8,7 +8,7 @@ class AbeBooksScraper:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.timeout = timeout
-        self.api_key = api_key or "e4b967afdaf014ef917eaa9773019cbe"
+        self.api_key = api_key
         self.client = ScraperAPIClient(api_key=self.api_key, country_code="it")
         self.cache = price_cache
 

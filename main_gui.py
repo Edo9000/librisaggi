@@ -34,42 +34,23 @@ class LibrisaggiApp(ctk.CTk):
         self.analyze_all_checkbox = ctk.CTkCheckBox(self, text="Analizza l'intero file", command=self.toggle_row_entry)
         self.analyze_all_checkbox.pack(pady=5)
 
-        self.worker_label = ctk.CTkLabel(self, text="Numero di worker (thread):")
+        self.worker_label = ctk.CTkLabel(self, text="Numero di worker (thread): (consigliato 90)")
         self.worker_label.pack(pady=5)
 
         self.worker_entry = ctk.CTkEntry(self)
-        self.worker_entry.insert(0, "5")
+        self.worker_entry.insert(0, "90")
         self.worker_entry.pack(pady=5)
 
-        self.output_label = ctk.CTkLabel(self, text="File di output:")
-        self.output_label.pack(pady=5)
+        self.api_key_label = ctk.CTkLabel(self, text="Chiave API ScraperAPI:")
+        self.api_key_label.pack(pady=5)
 
-        self.output_path = ctk.CTkEntry(self, width=400)
-        self.output_path.insert(0, "catalogo_con_prezzi.csv")
-        self.output_path.pack(pady=5)
-
-        self.output_button = ctk.CTkButton(self, text="Scegli dove salvare", command=self.select_output_path)
-        self.output_button.pack(pady=5)
+        self.api_key_entry = ctk.CTkEntry(self, width=400)
+        self.api_key_entry.insert(0, "e4b967afdaf014ef917eaa9773019cbe")  # eventualmente un valore di default
+        self.api_key_entry.pack(pady=5)
 
         self.cache_checkbox = ctk.CTkCheckBox(self, text="Usa cache locale (price_cache.json)")
         self.cache_checkbox.select()
         self.cache_checkbox.pack(pady=5)
-
-        self.ibs_checkbox = ctk.CTkCheckBox(self, text="Scrape IBS", command=self.check_scraper)
-        self.ibs_checkbox.select()
-        self.ibs_checkbox.pack(pady=5)
-
-        self.ebay_checkbox = ctk.CTkCheckBox(self, text="Scrape eBay", command=self.check_scraper)
-        self.ebay_checkbox.select()
-        self.ebay_checkbox.pack(pady=5)
-
-        self.amz_checkbox = ctk.CTkCheckBox(self, text="Scrape Amazon", command=self.check_scraper)
-        self.amz_checkbox.deselect()
-        self.amz_checkbox.pack(pady=5)
-
-        self.abebooks_checkbox = ctk.CTkCheckBox(self, text="Scrape AbeBooks", command=self.check_scraper)
-        self.abebooks_checkbox.deselect()
-        self.abebooks_checkbox.pack(pady=5)
 
         self.start_button = ctk.CTkButton(self, text="Avvia Aggiornamento", command=self.start_processing, state="disabled")
         self.start_button.pack(pady=20)
@@ -98,19 +79,7 @@ class LibrisaggiApp(ctk.CTk):
         if filepath:
             self.filepath = filepath
             self.file_label.configure(text=f"CSV: {filepath}")
-            self.check_scraper()
-
-    def select_output_path(self):
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-        if path:
-            self.output_path.delete(0, ctk.END)
-            self.output_path.insert(0, path)
-
-    def check_scraper(self):
-        if self.filepath and (self.ibs_checkbox.get() or self.ebay_checkbox.get() or self.amz_checkbox.get() or self.abebooks_checkbox.get()):
             self.start_button.configure(state="normal")
-        else:
-            self.start_button.configure(state="disabled")
 
     def request_stop(self):
         self.stop_requested = True
@@ -140,7 +109,6 @@ class LibrisaggiApp(ctk.CTk):
                 row_limit = int(self.row_entry.get()) if self.row_entry.get().isdigit() else 30
 
             max_workers = int(self.worker_entry.get()) if self.worker_entry.get().isdigit() else 5
-            output_file = self.output_path.get() or "catalogo_con_prezzi.csv"
             use_cache = self.cache_checkbox.get()
 
             def update_progress(p):
@@ -149,18 +117,16 @@ class LibrisaggiApp(ctk.CTk):
             def stop_check():
                 return self.stop_requested
 
+            api_key = self.api_key_entry.get().strip()
+
             output = start_processing_csv(
                 filename=self.filepath,
-                use_ibs=self.ibs_checkbox.get(),
-                use_ebay=self.ebay_checkbox.get(),
-                use_amz=self.amz_checkbox.get(),
-                use_abebooks=self.abebooks_checkbox.get(),
                 row_limit=row_limit,
                 max_workers=max_workers,
-                output_filename=output_file,
                 progress_callback=update_progress,
                 stop_requested_callback=stop_check,
-                use_cache=use_cache
+                use_cache=use_cache,
+                api_key=api_key
             )
             self.progress_label.configure(text=f"✅ File salvato: {output}")
         except Exception as e:
