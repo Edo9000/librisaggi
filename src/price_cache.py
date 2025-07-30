@@ -2,7 +2,12 @@ import json
 import os
 
 class PriceCache:
-    def __init__(self, path="price_cache.json"):
+    def __init__(self, path=None):
+        if path is None:
+            # Use user's Documents/Librisaggi/output/price_cache.json
+            base_dir = os.path.join(os.path.expanduser("~"), "Documents", "Librisaggi", "output")
+            os.makedirs(base_dir, exist_ok=True)
+            path = os.path.join(base_dir, "price_cache.json")
         self.path = path
         self.cache = {}
         print(f"📂 Cache: uso file '{self.path}'")

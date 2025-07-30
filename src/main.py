@@ -20,7 +20,7 @@ data_dir.mkdir(parents=True, exist_ok=True)
 cache_file = data_dir / "price_cache.json"
 output_file = data_dir / "catalogo_finale.csv"
 output_confronto = data_dir / "confronto_prezzi.csv"
-input_file = data_dir / "catalogo_con_prezzi.csv"
+input_file = data_dir / "catalogo_di_debug.csv"
 
 def start_processing_csv(
     filename: str,
