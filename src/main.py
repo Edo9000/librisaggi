@@ -11,24 +11,21 @@ from price_cache import PriceCache
 from scraper_api_client import build_query
 from typing import Callable
 from concurrent.futures import as_completed
+from pathlib import Path
 
-# Cartella base del progetto
-base_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = Path.home() / "Documents" / "Librisaggi"
+data_dir = base_dir / "output"
+data_dir.mkdir(parents=True, exist_ok=True)
 
-# Cartella per file generati
-data_dir = os.path.join(base_dir, "output")
-os.makedirs(data_dir, exist_ok=True)  # Crea la cartella se non esiste
-
-# Percorsi dei file nella cartella output/
-cache_file = os.path.join(data_dir, "price_cache.json")
-output_file = os.path.join(data_dir, "catalogo_finale.csv")
-output_confronto = os.path.join(data_dir, "confronto_prezzi.csv")
-input_file = os.path.join(data_dir, "catalogo_con_prezzi.csv")
+cache_file = data_dir / "price_cache.json"
+output_file = data_dir / "catalogo_finale.csv"
+output_confronto = data_dir / "confronto_prezzi.csv"
+input_file = data_dir / "catalogo_con_prezzi.csv"
 
 def start_processing_csv(
     filename: str,
     max_workers: int = 5,
-    output_filename: str = "src/output/catalogo_con_prezzi.csv",
+    output_filename: str = str(data_dir / "catalogo_di_debug.csv"),
     row_limit: int = 30,
     progress_callback=None,
     stop_requested_callback: Callable[[], bool] = lambda: False,

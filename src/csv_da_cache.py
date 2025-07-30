@@ -6,8 +6,7 @@ def esegui_post_processing(
     input_file: str,
     cache_file: str,
     output_file: str,
-    output_confronto: str,
-    output_sospetti: str = "prezzi_sospetti.csv"
+    output_confronto: str
 ):
     # === Carica CSV originale ===
     df = pd.read_csv(input_file, sep="\t")
@@ -183,19 +182,6 @@ def esegui_post_processing(
 
     df["Prezzo"] = df.apply(clamp_price, axis=1)
 
-    # === Isola i casi sospetti
-    df["Prezzo_Aggiornato_Temporaneo"] = pd.to_numeric(df["Prezzo"], errors="coerce")
-    df["DifferenzaAssoluta"] = df["Prezzo_Aggiornato_Temporaneo"] - df["Prezzo_Originale"]
-    df["DifferenzaRelativa"] = df["DifferenzaAssoluta"].abs() / df["Prezzo_Originale"]
-
-    df_sospetti = df[
-        (df["Prezzo_Originale"] > 0) &
-        (df["Prezzo_Aggiornato_Temporaneo"] > 100) &
-        (df["DifferenzaRelativa"] >= 0.4)
-    ].copy()
-
-    df.loc[df_sospetti.index, "Prezzo"] = df.loc[df_sospetti.index, "Prezzo_Originale"]
-
     # === Genera confronto prezzi
     df_confronto = df.copy()
     df_confronto["Prezzo_Originale"] = pd.to_numeric(df_confronto["Prezzo_Originale"], errors="coerce")
@@ -230,9 +216,4 @@ def esegui_post_processing(
     df = df[original_columns]
     df.to_csv(output_file, index=False, sep="\t")
 
-    df_sospetti["Prezzo_Calcolato"] = df_sospetti["Prezzo_Aggiornato_Temporaneo"]
-    df_sospetti["Diff_%"] = df_sospetti["DifferenzaRelativa"].apply(lambda x: f"{round(x * 100, 2)}%")
-    sospetti_cols = original_columns + ["Prezzo_Calcolato", "Diff_%"]
-    df_sospetti[sospetti_cols].to_csv(output_sospetti, sep="\t", index=False)
-
-    return output_file, output_confronto, output_sospetti
+    return output_file, output_confronto
